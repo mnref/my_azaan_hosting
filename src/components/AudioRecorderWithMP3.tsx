@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Mic, Square, Play, Pause, Settings, Loader2, Volume2, VolumeX, AlertCircle, X, MicOff, CheckCircle, RotateCcw } from 'lucide-react';
 import { useAudioConverter } from '../hooks/useAudioConverter';
 import { ConversionResult, ConversionOptions } from '../utils/AudioConverter';
+import MicrophonePermissionHelper from './MicrophonePermissionHelper';
 
 export interface AudioRecorderWithMP3Props {
   onRecordingComplete?: (result: ConversionResult) => void;
@@ -44,6 +45,8 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [conversionQuality, setConversionQuality] = useState<'low' | 'medium' | 'high'>('medium');
   const [customBitrate, setCustomBitrate] = useState<number>(128);
+  const [showPermissionHelper, setShowPermissionHelper] = useState(false);
+  const [permissionError, setPermissionError] = useState<string>('');
 
   // Reset component when resetKey changes
   useEffect(() => {
@@ -96,14 +99,47 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       }
       
       console.log('📱 Requesting microphone access...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          noiseSuppression: true,
-          echoCancellation: true,
-          autoGainControl: true,
-          sampleRate: 44100
+      
+      // Try to get microphone access with better error handling
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            noiseSuppression: true,
+            echoCancellation: true,
+            autoGainControl: true,
+            sampleRate: 44100
+          }
+        });
+      } catch (permissionError: unknown) {
+        console.error('❌ Microphone permission error:', permissionError);
+        
+        // Provide specific error messages based on the error type
+        if (permissionError instanceof DOMException) {
+          if (permissionError.name === 'NotAllowedError') {
+            throw new Error('Microphone access denied. Please allow microphone permissions in your browser settings and try again.');
+          } else if (permissionError.name === 'NotFoundError') {
+            throw new Error('No microphone found. Please connect a microphone and try again.');
+          } else if (permissionError.name === 'NotReadableError') {
+            throw new Error('Microphone is already in use by another application. Please close other apps using the microphone and try again.');
+          } else if (permissionError.name === 'OverconstrainedError') {
+            throw new Error('Microphone does not meet the required specifications. Please try a different microphone.');
+          } else if (permissionError.name === 'TypeError') {
+            throw new Error('Invalid microphone configuration. Please check your browser settings.');
+          } else if (permissionError.name === 'AbortError') {
+            throw new Error('Microphone access was aborted. Please try again.');
+          } else if (permissionError.name === 'SecurityError') {
+            throw new Error('Microphone access blocked by security policy. Please check if you\'re using HTTPS and try again.');
+          }
         }
-      });
+        
+        // Generic error message
+        const errorMessage = permissionError instanceof Error ? permissionError.message : 'Unknown error';
+        const fullErrorMessage = `Microphone access failed: ${errorMessage}. Please check your browser permissions and try again.`;
+        setPermissionError(fullErrorMessage);
+        setShowPermissionHelper(true);
+        throw new Error(fullErrorMessage);
+      }
       
       console.log('✅ Microphone access granted, stream received');
       console.log('🎵 Stream tracks: ' + stream.getTracks().length);
@@ -361,6 +397,13 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
     setIsPlaying(false);
   }, [recordingState.audioUrl, recordingState.mp3Url]);
 
+  // Handle retry for permission issues
+  const handleRetry = useCallback(() => {
+    setShowPermissionHelper(false);
+    setPermissionError('');
+    startRecording();
+  }, [startRecording]);
+
   // Handle audio events
   useEffect(() => {
     if (audioRef.current) {
@@ -573,6 +616,18 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
           )}
         </div>
       </div>
+
+      {/* Microphone Permission Helper */}
+      {showPermissionHelper && (
+        <MicrophonePermissionHelper
+          error={permissionError}
+          onRetry={handleRetry}
+          onClose={() => {
+            setShowPermissionHelper(false);
+            setPermissionError('');
+          }}
+        />
+      )}
     </div>
   );
 };
