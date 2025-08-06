@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Mic, Square, Play, Pause, Settings, Loader2, Volume2, VolumeX, AlertCircle, X, MicOff, CheckCircle, RotateCcw } from 'lucide-react';
+import { Mic, Square, Play, Pause, Settings, Loader2, Volume2, VolumeX, AlertCircle, X, MicOff, CheckCircle, RotateCcw, Wrench, AlertTriangle } from 'lucide-react';
 import { useAudioConverter } from '../hooks/useAudioConverter';
 import { ConversionResult, ConversionOptions } from '../utils/AudioConverter';
 import MicrophonePermissionHelper from './MicrophonePermissionHelper';
+import FFmpegDiagnostic from './FFmpegDiagnostic';
 
 export interface AudioRecorderWithMP3Props {
   onRecordingComplete?: (result: ConversionResult) => void;
@@ -47,6 +48,7 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
   const [customBitrate, setCustomBitrate] = useState<number>(128);
   const [showPermissionHelper, setShowPermissionHelper] = useState(false);
   const [permissionError, setPermissionError] = useState<string>('');
+  const [showFFmpegDiagnostic, setShowFFmpegDiagnostic] = useState(false);
 
   // Reset component when resetKey changes
   useEffect(() => {
@@ -603,6 +605,27 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
           </div>
         )}
 
+        {/* FFmpeg Not Ready Warning */}
+        {!isReady && !recordingState.mp3Url && (
+          <div className="w-full max-w-md p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-yellow-800">MP3 Conversion Not Available</h4>
+                <p className="text-xs text-yellow-700 mt-1">
+                  Your recording will be saved in WebM format. MP3 conversion requires additional browser support.
+                </p>
+                <button
+                  onClick={() => setShowFFmpegDiagnostic(true)}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline mt-2"
+                >
+                  Learn how to enable MP3 conversion
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex gap-3">
           {recordingState.mp3Blob && (
@@ -612,6 +635,18 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
             >
               <RotateCcw className="w-4 h-4" />
               Record Again
+            </button>
+          )}
+          
+          {/* FFmpeg Diagnostic Button - Show when FFmpeg is not ready */}
+          {!isReady && (
+            <button
+              onClick={() => setShowFFmpegDiagnostic(true)}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors flex items-center gap-2"
+              title="FFmpeg is not working. Click to diagnose the issue."
+            >
+              <Wrench className="w-4 h-4" />
+              <span>Fix MP3 Conversion</span>
             </button>
           )}
         </div>
@@ -626,6 +661,13 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
             setShowPermissionHelper(false);
             setPermissionError('');
           }}
+        />
+      )}
+
+      {/* FFmpeg Diagnostic */}
+      {showFFmpegDiagnostic && (
+        <FFmpegDiagnostic
+          onClose={() => setShowFFmpegDiagnostic(false)}
         />
       )}
     </div>
