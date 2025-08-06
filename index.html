@@ -6,6 +6,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MyAzaan - Perfect Your Call to Prayer</title>
     <meta name="description" content="Learn and perfect your Azaan recitation with our interactive trainer featuring expert demonstrations, audio recording, and progress tracking." />
+    <script>
+      // Early WebSocket polyfill to prevent module resolution errors
+      if (typeof window !== 'undefined') {
+        // Ensure WebSocket is available
+        if (!window.WebSocket) {
+          console.warn('WebSocket not available in this environment');
+        }
+        
+        // Create ws module polyfill
+        window.ws = {
+          WebSocket: window.WebSocket,
+          CONNECTING: 0,
+          OPEN: 1,
+          CLOSING: 2,
+          CLOSED: 3,
+        };
+        
+        // Create a module resolution system
+        window.__moduleCache = new Map();
+        window.__moduleCache.set('ws', window.ws);
+        
+        // Override import if needed
+        if (typeof window.import !== 'function') {
+          window.import = function(moduleName) {
+            if (window.__moduleCache.has(moduleName)) {
+              return Promise.resolve(window.__moduleCache.get(moduleName));
+            }
+            throw new Error(`Module '${moduleName}' not found`);
+          };
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

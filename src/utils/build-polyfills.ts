@@ -1,7 +1,8 @@
-// WebSocket polyfill for browser environment
-// This replaces the Node.js 'ws' module with browser WebSocket
+// Build-time polyfills for browser environment
+// This ensures compatibility with Node.js modules in the browser
 
-class WebSocketPolyfill {
+// WebSocket polyfill
+const WebSocketPolyfill = class {
   private ws: WebSocket | null = null;
   private url: string;
 
@@ -83,30 +84,14 @@ class WebSocketPolyfill {
   get bufferedAmount() {
     return this.ws ? this.ws.bufferedAmount : 0;
   }
+};
 
-  get CONNECTING() {
-    return WebSocket.CONNECTING;
-  }
-
-  get OPEN() {
-    return WebSocket.OPEN;
-  }
-
-  get CLOSING() {
-    return WebSocket.CLOSING;
-  }
-
-  get CLOSED() {
-    return WebSocket.CLOSED;
-  }
-}
-
-// Static properties for WebSocket constants
+// Static properties
 WebSocketPolyfill.CONNECTING = WebSocket.CONNECTING;
 WebSocketPolyfill.OPEN = WebSocket.OPEN;
 WebSocketPolyfill.CLOSING = WebSocket.CLOSING;
 WebSocketPolyfill.CLOSED = WebSocket.CLOSED;
 
-// Export as default and named export
+// Export the polyfill
 export default WebSocketPolyfill;
 export { WebSocketPolyfill as WebSocket }; 

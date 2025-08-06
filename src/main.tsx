@@ -1,3 +1,7 @@
+// Import polyfills first
+import './utils/global-polyfills';
+import './utils/runtime-polyfills';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
