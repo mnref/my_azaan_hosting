@@ -4,6 +4,8 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+console.log('🔥 Initializing Firebase...');
+
 const firebaseConfig = {
   apiKey: "AIzaSyAW6QrCnC2vVw4KzPtsTc5pekOccRIj7-0",
   authDomain: "azaan-app-41cac.firebaseapp.com",
@@ -14,7 +16,23 @@ const firebaseConfig = {
   measurementId: "G-18EJSHEGML"
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+let app;
+let auth;
+let db;
+let storage;
+
+try {
+  app = initializeApp(firebaseConfig);
+  console.log('✅ Firebase app initialized successfully');
+  
+  auth = getAuth(app);
+  db = getFirestore(app);
+  storage = getStorage(app);
+  
+  console.log('✅ Firebase services initialized successfully');
+} catch (error) {
+  console.error('❌ Firebase initialization failed:', error);
+  throw error;
+}
+
+export { auth, db, storage };

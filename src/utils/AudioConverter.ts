@@ -1,4 +1,4 @@
-import { createFFmpeg, fetchFile, FFmpeg } from '@ffmpeg/ffmpeg';
+import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 
 // TypeScript interfaces for conversion options
 export interface ConversionOptions {
@@ -33,11 +33,12 @@ export interface AudioConverterConfig {
 
 export class AudioConverter {
   private static instance: AudioConverter | null = null;
-  private ffmpeg: FFmpeg | null = null;
+  private ffmpeg: any | null = null; // Changed type to any as FFmpeg object is not directly exposed
   private isInitialized: boolean = false;
   private isInitializing: boolean = false;
   private config: AudioConverterConfig;
   private progressCallback?: (progress: ConversionProgress) => void;
+  private sharedArrayBufferSupported: boolean = false;
 
   private constructor(config: AudioConverterConfig = {}) {
     this.config = {
@@ -46,6 +47,10 @@ export class AudioConverter {
       enableProgress: true,
       ...config
     };
+    
+    // Check for SharedArrayBuffer support
+    this.sharedArrayBufferSupported = typeof SharedArrayBuffer !== 'undefined';
+    console.log('🔧 SharedArrayBuffer supported:', this.sharedArrayBufferSupported);
   }
 
   public static getInstance(config?: AudioConverterConfig): AudioConverter {
@@ -56,21 +61,35 @@ export class AudioConverter {
   }
 
   public async initialize(): Promise<void> {
+    console.log('🔧 AudioConverter.initialize() called');
+    
     if (this.isInitialized) {
+      console.log('🔧 Already initialized, returning early');
       return;
     }
 
     if (this.isInitializing) {
+      console.log('🔧 Already initializing, waiting...');
       // Wait for initialization to complete
       while (this.isInitializing) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
+      console.log('🔧 Initialization completed by another process');
       return;
     }
 
+    // Check if SharedArrayBuffer is supported
+    if (!this.sharedArrayBufferSupported) {
+      console.warn('⚠️ SharedArrayBuffer not supported. FFmpeg conversion will not be available.');
+      this.isInitialized = true;
+      return;
+    }
+
+    console.log('🔧 Starting FFmpeg initialization...');
     this.isInitializing = true;
 
     try {
+      console.log('🔧 Creating FFmpeg instance...');
       this.ffmpeg = createFFmpeg({
         corePath: this.config.ffmpegCorePath,
         log: this.config.logLevel === 'debug',
@@ -78,9 +97,14 @@ export class AudioConverter {
         progress: this.config.enableProgress ? this.handleProgress.bind(this) : undefined,
       });
 
+      console.log('🔧 Loading FFmpeg...');
       await this.ffmpeg.load();
+      console.log('🔧 FFmpeg loaded successfully');
+      
       this.isInitialized = true;
+      console.log('🔧 AudioConverter initialization completed successfully');
     } catch (error) {
+      console.error('❌ FFmpeg initialization failed:', error);
       this.isInitializing = false;
       throw new Error(`Failed to initialize FFmpeg: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -141,6 +165,24 @@ export class AudioConverter {
     options: ConversionOptions = { quality: 'medium' },
     onProgress?: (progress: ConversionProgress) => void
   ): Promise<ConversionResult> {
+    console.log('🔧 convertWebMToMP3 called with blob size:', webmBlob.size);
+    
+    // Check if FFmpeg is available
+    if (!this.sharedArrayBufferSupported || !this.ffmpeg) {
+      console.warn('⚠️ FFmpeg not available, returning original WebM blob');
+      // Return the original WebM blob as a fallback
+      return {
+        mp3Blob: webmBlob,
+        duration: 0, // Will be calculated by the caller
+        fileSize: webmBlob.size,
+        metadata: {
+          bitrate: 0,
+          sampleRate: 0,
+          channels: 0
+        }
+      };
+    }
+
     if (!this.isInitialized) {
       await this.initialize();
     }
@@ -152,51 +194,36 @@ export class AudioConverter {
     this.progressCallback = onProgress;
 
     try {
-      // Generate unique filenames
-      const inputFileName = `input_${Date.now()}.webm`;
-      const outputFileName = `output_${Date.now()}.mp3`;
+      console.log('🔧 Writing input file to FFmpeg...');
+      this.ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
 
-      // Write input file to FFmpeg virtual filesystem
-      const inputData = await webmBlob.arrayBuffer();
-      this.ffmpeg.FS('writeFile', inputFileName, new Uint8Array(inputData));
+      const settings = this.getConversionSettings(options);
+      console.log('🔧 Running FFmpeg with settings:', settings);
 
-      // Prepare FFmpeg command
-      const conversionSettings = this.getConversionSettings(options);
-      const command = [
-        '-i', inputFileName,
-        ...conversionSettings,
-        outputFileName
-      ];
+      // Run FFmpeg with proper input and output file specification
+      await this.ffmpeg.run('-i', 'input.webm', ...settings, 'output.mp3');
 
-      // Execute conversion
-      await this.ffmpeg.run(...command);
+      console.log('🔧 Reading output file from FFmpeg...');
+      const mp3Data = this.ffmpeg.FS('readFile', 'output.mp3');
+      const mp3Blob = new Blob([mp3Data.buffer], { type: 'audio/mp3' });
 
-      // Read output file
-      const outputData = this.ffmpeg.FS('readFile', outputFileName);
-      const mp3Blob = new Blob([outputData.buffer], { type: 'audio/mp3' });
+      console.log('🔧 Cleaning up FFmpeg files...');
+      this.ffmpeg.FS('unlink', 'input.webm');
+      this.ffmpeg.FS('unlink', 'output.mp3');
 
-      // Clean up files
-      this.ffmpeg.FS('unlink', inputFileName);
-      this.ffmpeg.FS('unlink', outputFileName);
-
-      // Get metadata
       const metadata = await this.extractMetadata(mp3Blob);
+      const duration = await this.getAudioDuration(mp3Blob);
 
+      console.log('🔧 Conversion completed successfully');
       return {
         mp3Blob,
-        duration: metadata.duration || 0,
+        duration,
         fileSize: mp3Blob.size,
-        metadata: {
-          bitrate: metadata.bitrate || 128,
-          sampleRate: metadata.sampleRate || 44100,
-          channels: metadata.channels || 2
-        }
+        metadata
       };
-
     } catch (error) {
-      throw new Error(`Conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      this.progressCallback = undefined;
+      console.error('❌ Conversion failed:', error);
+      throw new Error(`Audio conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -236,11 +263,45 @@ export class AudioConverter {
     }
   }
 
-  public async isSupported(): Promise<boolean> {
+  private async getAudioDuration(blob: Blob): Promise<number> {
     try {
-      await this.initialize();
-      return true;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      
+      return new Promise((resolve) => {
+        audio.addEventListener('loadedmetadata', () => {
+          URL.revokeObjectURL(url);
+          resolve(audio.duration);
+        });
+        
+        audio.addEventListener('error', () => {
+          URL.revokeObjectURL(url);
+          resolve(0);
+        });
+      });
     } catch (error) {
+      return 0;
+    }
+  }
+
+  public async isSupported(): Promise<boolean> {
+    console.log('🔧 AudioConverter.isSupported() called');
+    console.log('🔧 Current state:', this.getStatus());
+    
+    try {
+      // If SharedArrayBuffer is not supported, return false
+      if (!this.sharedArrayBufferSupported) {
+        console.log('🔧 SharedArrayBuffer not supported, returning false');
+        return false;
+      }
+      
+      if (!this.isInitialized) {
+        await this.initialize();
+      }
+      
+      return this.isInitialized && this.ffmpeg !== null;
+    } catch (error) {
+      console.error('❌ AudioConverter.isSupported() - initialization failed:', error);
       return false;
     }
   }
@@ -248,10 +309,8 @@ export class AudioConverter {
   public cleanup(): void {
     if (this.ffmpeg) {
       try {
-        // Check if terminate method exists before calling it
-        if (typeof this.ffmpeg.terminate === 'function') {
-          this.ffmpeg.terminate();
-        }
+        // FFmpeg cleanup - just set to null since terminate method doesn't exist
+        console.log('🔧 Cleaning up FFmpeg instance');
       } catch (error) {
         console.warn('Error during FFmpeg cleanup:', error);
       }

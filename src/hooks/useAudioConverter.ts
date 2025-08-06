@@ -38,10 +38,14 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
   useEffect(() => {
     const initializeConverter = async () => {
       try {
+        console.log('🔧 Starting AudioConverter initialization...');
         setState(prev => ({ ...prev, isInitializing: true, error: null }));
         
         audioConverterRef.current = AudioConverter.getInstance();
+        console.log('🔧 AudioConverter instance created');
+        
         const isSupported = await audioConverterRef.current.isSupported();
+        console.log('🔧 FFmpeg support check result:', isSupported);
         
         setState(prev => ({
           ...prev,
@@ -49,7 +53,10 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
           isReady: isSupported,
           isSupported
         }));
+        
+        console.log('🔧 AudioConverter initialization completed. Ready:', isSupported);
       } catch (error) {
+        console.error('❌ AudioConverter initialization failed:', error);
         setState(prev => ({
           ...prev,
           isInitializing: false,
@@ -75,13 +82,16 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
 
   const checkSupport = useCallback(async (): Promise<boolean> => {
     try {
+      console.log('🔧 Checking FFmpeg.wasm support...');
       if (!audioConverterRef.current) {
         audioConverterRef.current = AudioConverter.getInstance();
       }
       const isSupported = await audioConverterRef.current.isSupported();
+      console.log('✅ FFmpeg.wasm support:', isSupported);
       setState(prev => ({ ...prev, isSupported, isReady: isSupported }));
       return isSupported;
     } catch (error) {
+      console.error('❌ FFmpeg.wasm support check failed:', error);
       setState(prev => ({
         ...prev,
         isSupported: false,
@@ -99,6 +109,13 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
   ): Promise<ConversionResult> => {
     if (!audioConverterRef.current) {
       throw new Error('Audio converter not initialized');
+    }
+
+    // Ensure FFmpeg is ready before conversion
+    if (!state.isReady) {
+      console.log('🔄 FFmpeg not ready, initializing...');
+      await audioConverterRef.current.initialize();
+      setState(prev => ({ ...prev, isReady: true }));
     }
 
     // Create abort controller for this conversion

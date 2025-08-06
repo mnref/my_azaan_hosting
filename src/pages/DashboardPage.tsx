@@ -6,6 +6,8 @@ import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from '
 import Header from '../components/Header';
 import { ArrowLeft, Trophy, Target, Clock, TrendingUp, Award, CheckCircle, Lock, Play } from 'lucide-react';
 
+console.log('📊 DashboardPage component loading...');
+
 interface DashboardData {
   // From User collection
   totalScore: number;
@@ -32,14 +34,24 @@ interface DashboardData {
 }
 
 const DashboardPage: React.FC = () => {
+  console.log('🎯 DashboardPage component rendering...');
+  
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  console.log('📊 DashboardPage state:', { currentUser: !!currentUser, loading });
+
   useEffect(() => {
+    console.log('📊 Fetching dashboard data...');
     const fetchDashboardData = async () => {
-      if (!currentUser) return;
+      if (!currentUser) {
+        console.log('❌ No current user, skipping dashboard data fetch');
+        return;
+      }
+
+      console.log('👤 Fetching data for user:', currentUser.email);
 
       try {
         // Fetch user data from real Firestore
@@ -47,10 +59,11 @@ const DashboardPage: React.FC = () => {
         const userDoc = await getDoc(userRef);
         
         if (!userDoc.exists()) {
-          console.error('User document not found in Firestore');
+          console.error('❌ User document not found in Firestore');
           return;
         }
 
+        console.log('✅ User document found, processing data...');
         const userData = userDoc.data();
         
         // Calculate progress metrics
@@ -75,7 +88,10 @@ const DashboardPage: React.FC = () => {
           }
         }
 
+        console.log('📈 Progress calculated:', { completedPhrases, unlockedPhrases, currentActivePhrase });
+
         // Fetch recent attempts from api_call_analysis (simplified query to avoid index requirement)
+        console.log('📊 Fetching recent attempts...');
         const analysisQuery = query(
           collection(db, 'api_call_analysis'),
           where('user_email', '==', currentUser.email),
@@ -94,6 +110,8 @@ const DashboardPage: React.FC = () => {
           })
           .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) // Sort client-side
           .slice(0, 10); // Take only the 10 most recent
+
+        console.log('📊 Recent attempts loaded:', recentAttempts.length);
 
         // Calculate success rate
         const totalAttempts = recentAttempts.length;

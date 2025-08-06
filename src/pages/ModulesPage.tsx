@@ -8,7 +8,11 @@ import { useEffect, useState } from 'react';
 import { db } from '../firebase/config';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 
+console.log('📚 ModulesPage component loading...');
+
 const ModulesPage: React.FC = () => {
+  console.log('🎯 ModulesPage component rendering...');
+  
   const navigate = useNavigate();
   const { logout, currentUser } = useAuth();
   const [phraseProgress, setPhraseProgress] = useState<{ [key: string]: boolean }>({});
@@ -16,9 +20,13 @@ const ModulesPage: React.FC = () => {
   const [analysis, setAnalysis] = useState<number>(0);
   const [popup, setPopup] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
 
+  console.log('📊 ModulesPage state:', { currentUser: !!currentUser, analysis });
+
   useEffect(() => {
+    console.log('🔄 Checking and resetting daily credit...');
     const checkAndResetDailyCredit = async () => {
       if (currentUser) {
+        console.log('👤 Checking credit for user:', currentUser.email);
         const userRef = doc(db, 'User', currentUser.uid);
         const userDoc = await getDoc(userRef);
         if (userDoc.exists()) {
@@ -34,9 +42,11 @@ const ModulesPage: React.FC = () => {
             date1.getUTCDate() === date2.getUTCDate()
           );
           if (lockuntillDate && isSameDayUTC(lockuntillDate, todayMidnight)) {
+            console.log('🔄 Resetting daily credit for same day');
             await updateDoc(userRef, { analysis: 0 });
             await updateDoc(userRef, { lockuntill: Timestamp.fromDate(tomorrowMidnight) });
           } else if (!lockuntillDate || lockuntillDate < todayMidnight) {
+            console.log('🔄 Resetting daily credit for new day');
             await updateDoc(userRef, { analysis: 0 });
             await updateDoc(userRef, { lockuntill: Timestamp.fromDate(tomorrowMidnight) });
           }
@@ -47,8 +57,10 @@ const ModulesPage: React.FC = () => {
   }, [currentUser]);
 
   useEffect(() => {
+    console.log('📊 Fetching user progress...');
     const fetchProgress = async () => {
       if (currentUser) {
+        console.log('👤 Fetching progress for user:', currentUser.email);
         const userDoc = await getDoc(doc(db, 'User', currentUser.uid));
         if (userDoc.exists()) {
           const data = userDoc.data();
@@ -61,6 +73,7 @@ const ModulesPage: React.FC = () => {
           setPhraseProgress(progress);
           setCheckProgress(checks);
           setAnalysis(typeof data.analysis === 'number' ? data.analysis : 0);
+          console.log('✅ Progress loaded:', { progress, checks, analysis: data.analysis });
         }
       }
     };
@@ -68,24 +81,36 @@ const ModulesPage: React.FC = () => {
   }, [currentUser]);
 
   const handleLogout = async () => {
+    console.log('🚪 User logging out...');
     try {
       await logout();
       navigate('/login');
+      console.log('✅ Logout successful');
     } catch (error) {
-      console.error('Failed to log out:', error);
+      console.error('❌ Failed to log out:', error);
     }
   };
 
   const handleModuleClick = (phraseId: number) => {
+    console.log('🎯 Module clicked:', phraseId);
+    console.log('📊 Current state:', { 
+      phraseProgress: phraseProgress[`phrase${phraseId}`], 
+      checkProgress: checkProgress[`check${phraseId}`], 
+      analysis 
+    });
+    
     if (checkProgress[`check${phraseId}`]) {
+      console.log('✅ Phrase already completed');
       setPopup({
         show: true,
         message: `You have already completed Phrase ${phraseId}.`
       });
     } else if (phraseProgress[`phrase${phraseId}`]) {
       if (analysis < 20) {
+        console.log('🎯 Navigating to phrase:', phraseId);
         navigate(`/module/phrase/${phraseId}`);
       } else {
+        console.log('❌ Daily credit exceeded');
         setPopup({
           show: true,
           message: 'You have exceeded your daily credit. Try again tomorrow.'
@@ -100,12 +125,17 @@ const ModulesPage: React.FC = () => {
           break;
         }
       }
-      setPopup({
-        show: true,
-        message: lastUnlocked > 0
-          ? `Please complete Phrase ${lastUnlocked} to unlock the next level.`
-          : 'Please complete Phrase 1 to unlock the next level.'
-      });
+      
+      if (lastUnlocked === 0) {
+        console.log('🔓 First phrase, allowing access');
+        navigate(`/module/phrase/${phraseId}`);
+      } else {
+        console.log('🔒 Phrase locked, last unlocked:', lastUnlocked);
+        setPopup({
+          show: true,
+          message: `Please complete Phrase ${lastUnlocked} first.`
+        });
+      }
     }
   };
 

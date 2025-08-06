@@ -40,116 +40,82 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  console.log('🔐 AuthProvider rendering...');
+  
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const login = async (email: string, password: string) => {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    setCurrentUser({
-      uid: user.uid,
-      email: user.email || '',
-      displayName: user.displayName || '',
-      phoneNumber: user.phoneNumber || ''
+  useEffect(() => {
+    console.log('🔐 Setting up auth state listener...');
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log('🔐 Auth state changed:', user ? `User ${user.email} logged in` : 'No user');
+      setCurrentUser(user);
+      setLoading(false);
     });
-    return userCredential;
+
+    return unsubscribe;
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    console.log('🔐 Attempting login for:', email);
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      console.log('✅ Login successful for:', email);
+      return result;
+    } catch (error) {
+      console.error('❌ Login failed:', error);
+      throw error;
+    }
   };
 
-  const register = async (
-    fullName: string,
-    email: string,
-    password: string,
-    confirmPassword: string,
-    phoneNumber: string
-  ) => {
+  const register = async (fullName: string, email: string, password: string, confirmPassword: string, phoneNumber: string) => {
+    console.log('🔐 Attempting registration for:', email);
+    
     if (password !== confirmPassword) {
+      console.error('❌ Passwords do not match');
       throw new Error('Passwords do not match');
     }
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    // Add user document to Firestore
-    await setDoc(doc(db, 'User', user.uid), {
-      analysis: 0,
-      betatesting: false,
-      check1: false,
-      check2: false,
-      check3: false,
-      check4: false,
-      check5: false,
-      check6: false,
-      check7: false,
-      check8: false,
-      check9: false,
-      check10: false,
-      check11: false,
-      check12: false,
-      check13: false,
-      check14: false,
-      confirm_password: confirmPassword,
-      created_time: serverTimestamp(),
-      display_name: fullName,
-      email: email,
-      is_admin: false,
-      is_verified: false,
-      lockuntill: serverTimestamp(),
-      password: password,
-      phone_number: phoneNumber,
-      phrase1: true,
-      phrase2: false,
-      phrase3: false,
-      phrase4: false,
-      phrase5: false,
-      phrase6: false,
-      phrase7: false,
-      phrase8: false,
-      phrase9: false,
-      phrase10: false,
-      phrase11: false,
-      phrase12: false,
-      phrase13: false,
-      phrase14: false,
-      score: 0,
-      subscription_date: null,
-      uid: user.uid
-    });
-    setCurrentUser({
-      uid: user.uid,
-      email: user.email || '',
-      displayName: fullName,
-      phoneNumber: phoneNumber
-    });
-    return userCredential;
+
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      console.log('✅ Registration successful for:', email);
+      
+      // Save additional user data to Firestore
+      await setDoc(doc(db, 'users', result.user.uid), {
+        fullName,
+        email,
+        phoneNumber,
+        createdAt: serverTimestamp(),
+      });
+      console.log('✅ User data saved to Firestore');
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Registration failed:', error);
+      throw error;
+    }
   };
 
   const logout = async () => {
-    await signOut(auth);
-    setCurrentUser(null);
+    console.log('🔐 Attempting logout...');
+    try {
+      await signOut(auth);
+      console.log('✅ Logout successful');
+    } catch (error) {
+      console.error('❌ Logout failed:', error);
+      throw error;
+    }
   };
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setCurrentUser({
-          uid: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || '',
-          phoneNumber: user.phoneNumber || ''
-        });
-      } else {
-        setCurrentUser(null);
-      }
-      setLoading(false);
-    });
-    return unsubscribe;
-  }, []);
 
   const value = {
     currentUser,
     login,
     register,
     logout,
-    loading
+    loading,
   };
+
+  console.log('🔐 AuthProvider value created:', { currentUser: currentUser?.email, loading });
 
   return (
     <AuthContext.Provider value={value}>

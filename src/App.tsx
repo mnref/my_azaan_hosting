@@ -8,12 +8,17 @@ import ModulesPage from './pages/ModulesPage';
 import PhraseDetailPage from './pages/PhraseDetailPage';
 import DashboardPage from './pages/DashboardPage';
 
+console.log('🚀 App.tsx loading...');
+
 function App() {
+  console.log('🎯 App component rendering...');
+  
   return (
     <AuthProvider>
       <Router>
         <div className="App">
           <Routes>
+            {/* Production Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route
@@ -47,5 +52,7 @@ function App() {
     </AuthProvider>
   );
 }
+
+console.log('✅ App.tsx loaded successfully');
 
 export default App;

@@ -11,17 +11,31 @@ export default defineConfig({
   ssr: {
     noExternal: ['@ffmpeg/ffmpeg'],
   },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          ffmpeg: ['@ffmpeg/ffmpeg', '@ffmpeg/core'],
+        },
+      },
+    },
+  },
   server: {
-    proxy: {
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    },
+    // Development proxy - only used in development
+    proxy: process.env.NODE_ENV === 'development' ? {
       '/api': {
         target: 'http://172.184.138.18:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
-    },
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    }
+    } : undefined,
   },
 });

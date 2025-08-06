@@ -87,7 +87,7 @@ export const phrasesData: Phrase[] = [
     transliteration: "Hayya 'ala as-salah",
     translation: "Come to prayer",
     videoUrl: "https://www.youtube.com/embed/yto2bedxQfM",
-    audioUrl: "https://firebasestorage.googleapis.com/v0/b/azaan-app-41cac.firebasestorage.app/o/azaans%2Fqari_part_9.mp3?alt=media&token=dfc8204e-37f0-44e6-90cf-e9420c94809e",
+    audioUrl: "https://firebasestorage.googleapis.com/v0/b/azaan-app-41cac.firebasestorage.app/o/azaans%2Fqari_part_8.mp3?alt=media&token=dfc8204e-37f0-44e6-90cf-e9420c94809e",
     duration: 7
   },
   {
