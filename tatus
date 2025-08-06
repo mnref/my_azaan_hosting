@@ -1,0 +1,5 @@
+[33m9119b8a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: resolve WebSocket module issue for Firebase in browser environment
+[33m0b7699f[m fix: move vite to dependencies and add npm flags for netlify build
+[33madd4227[m fix: add vite as devDependency for Netlify
+[33m58534fc[m Initial commit for MyAzaan project
+[33m43352e8[m Initial commit: MyAzaan app with MP3 conversion and CORS fixes

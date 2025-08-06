@@ -17,7 +17,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      'ws': 'faye-websocket',
+      'ws': './src/utils/ws-polyfill.ts',
     },
   },
   build: {
