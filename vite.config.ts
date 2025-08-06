@@ -7,15 +7,25 @@ export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   optimizeDeps: {
     include: ['@ffmpeg/ffmpeg'],
+    exclude: ['faye-websocket'],
   },
   ssr: {
     noExternal: ['@ffmpeg/ffmpeg'],
+  },
+  define: {
+    global: 'globalThis',
+  },
+  resolve: {
+    alias: {
+      'ws': 'faye-websocket',
+    },
   },
   build: {
     outDir: 'dist',
     sourcemap: false,
     minify: 'esbuild',
     rollupOptions: {
+      external: ['ws'],
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
