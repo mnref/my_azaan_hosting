@@ -8,7 +8,8 @@ import { phrasesData } from '../data/phrasesData';
 import Header from '../components/Header';
 import AudioRecorderWithMP3 from '../components/AudioRecorderWithMP3';
 import { createSafeUrl } from '../utils/proxyHelper';
-import { ConversionResult } from '../utils/AudioConverter';
+import { ConversionResult } from '../utils/WebAudioConverter';
+import AudioTest from '../components/AudioTest';
 
 // REMOVE: FFmpegConverter class and all ffmpeg/MP3 conversion logic
 
@@ -38,6 +39,7 @@ const PhraseDetailPage: React.FC = () => {
   const [showHowToUse, setShowHowToUse] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const [referenceAudioFailed, setReferenceAudioFailed] = useState(false);
+  const [showAudioTest, setShowAudioTest] = useState(false);
   
   // Custom audio player state for reference audio
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -130,35 +132,69 @@ const PhraseDetailPage: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  // Restore original handleAnalyze logic for WebM
+  // Enhanced handleAnalyze with better debugging
   const handleAnalyze = async () => {
+    console.log('🔍 Analyze button clicked!');
+    console.log('🔍 Current state:', {
+      currentUser: !!currentUser,
+      mp3Blob: !!mp3Blob,
+      phraseId: phrase?.id,
+      analyzeLoading,
+      conversionLoading
+    });
+    
     setAnalyzeMessage(null);
     setAnalyzeLoading(true);
     setConversionLoading(false);
+    
     try {
-      if (!currentUser) throw new Error('User not logged in');
+      if (!currentUser) {
+        console.error('❌ No current user');
+        throw new Error('User not logged in');
+      }
+      
+      console.log('🔍 User authenticated:', currentUser.email);
+      
       const userRef = doc(db, 'User', currentUser.uid);
       const userDoc = await getDoc(userRef);
-      if (!userDoc.exists()) throw new Error('User not found');
+      
+      if (!userDoc.exists()) {
+        console.error('❌ User document not found');
+        throw new Error('User not found');
+      }
+      
       const userData = userDoc.data();
+      console.log('🔍 User data loaded:', {
+        analysis: userData.analysis,
+        phraseCheck: userData[`check${phrase!.id}`],
+        phraseUnlocked: userData[`phrase${phrase!.id}`]
+      });
+      
       if (userData[`check${phrase!.id}`]) {
+        console.log('❌ Module already completed');
         setAnalyzeMessage("You've already completed this module. Please proceed to the next one.");
         setAnalyzeLoading(false);
         return;
       }
+      
       if (!userData[`phrase${phrase!.id}`]) {
+        console.log('❌ Module is locked');
         setAnalyzeMessage("This module is locked. Please complete the previous one first.");
         setAnalyzeLoading(false);
         return;
       }
+      
       if (typeof userData.analysis === 'number' && userData.analysis >= 20) {
+        console.log('❌ Daily limit reached');
         setAnalyzeMessage("You've used up your daily limit. Please try again in a few hours.");
         setAnalyzeLoading(false);
         setTimeout(() => navigate('/modules'), 2000);
         return;
       }
+      
       // Use MP3 recording
       if (!mp3Blob) {
+        console.error('❌ No MP3 recording found');
         setAnalyzeMessage('No MP3 recording found. Please record your voice first.');
         setAnalyzeLoading(false);
         return;
@@ -174,6 +210,7 @@ const PhraseDetailPage: React.FC = () => {
       
       const formData = new FormData();
       formData.append('file', recordingBlob, fileName);
+      
       const apiEndpoints: { [key: number]: string } = {
         1: '/api/validate-first-takbir/',
         2: '/api/validate-second-takbir/',
@@ -190,7 +227,11 @@ const PhraseDetailPage: React.FC = () => {
         13: '/api/validate-final-takbir/',
         14: '/api/validate-final-testimony/',
       };
+      
       const apiEndpoint = apiEndpoints[phrase!.id as number] || '/api/validate-first-takbir/';
+      console.log('🔍 Using API endpoint:', apiEndpoint);
+      
+      console.log('🔍 Sending request to server...');
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
@@ -198,6 +239,9 @@ const PhraseDetailPage: React.FC = () => {
         },
         body: formData
       });
+      
+      console.log('🔍 Server response status:', response.status);
+      console.log('🔍 Server response headers:', Object.fromEntries(response.headers.entries()));
       if (!response.ok) {
         setAnalyzeMessage('The server is currently down. Please try again later.');
         setAnalyzeLoading(false);
@@ -304,34 +348,55 @@ const PhraseDetailPage: React.FC = () => {
 
 
 
-  // Load reference audio with server-only approach
+  // Load reference audio with better error handling
   useEffect(() => {
     const loadReferenceAudio = async () => {
       try {
         console.log('🎵 Loading server reference audio...');
-        // Use server-only approach for reference audio
-        const safeUrl = createSafeUrl(phrase!.audioUrl);
-        setReferenceAudioUrl(safeUrl);
-        console.log('✅ Server reference audio URL set:', safeUrl);
+        
+        // Try multiple approaches for loading audio
+        const approaches = [
+          // Approach 1: Direct Firebase URL with cache busting
+          () => `${phrase!.audioUrl}?_cb=${Date.now()}`,
+          // Approach 2: Original URL
+          () => phrase!.audioUrl,
+          // Approach 3: URL with different cache busting
+          () => `${phrase!.audioUrl}&_cb=${Date.now()}`
+        ];
+
+        for (let i = 0; i < approaches.length; i++) {
+          try {
+            const testUrl = approaches[i]();
+            console.log(`🎵 Trying approach ${i + 1}:`, testUrl);
+            
+            // Test if the URL is accessible
+            const response = await fetch(testUrl, { 
+              method: 'HEAD',
+              mode: 'cors'
+            });
+            
+            if (response.ok) {
+              setReferenceAudioUrl(testUrl);
+              console.log(`✅ Reference audio URL set (approach ${i + 1}):`, testUrl);
+              return;
+            }
+          } catch (error) {
+            console.log(`❌ Approach ${i + 1} failed:`, error);
+            continue;
+          }
+        }
+        
+        // If all approaches fail, use the original URL
+        console.log('⚠️ All approaches failed, using original URL');
+        setReferenceAudioUrl(phrase!.audioUrl);
+        
       } catch (error) {
         console.error('Failed to load server reference audio:', error);
-        // Fallback to original URL
         setReferenceAudioUrl(phrase!.audioUrl);
       }
     };
 
-    // Add timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      if (!referenceAudioUrl) {
-        console.log('⏰ Server reference audio loading timeout, using direct URL');
-        setReferenceAudioUrl(phrase!.audioUrl);
-      }
-    }, 5000); // 5 second timeout
-
     loadReferenceAudio();
-
-    // Cleanup timeout
-    return () => clearTimeout(timeoutId);
   }, [phrase]);
 
 
@@ -485,6 +550,13 @@ const PhraseDetailPage: React.FC = () => {
                 <span className="text-amber-500">You can still record and analyze your voice!</span>
                 <br/>
                 <span className="text-amber-400">💡 Tip: Watch the expert demonstration video for guidance</span>
+                <br/>
+                <button
+                  onClick={() => setShowAudioTest(true)}
+                  className="text-blue-600 hover:text-blue-800 underline mt-1"
+                >
+                  🔧 Test Audio Connection
+                </button>
               </div>
             )}
             <input
@@ -772,6 +844,14 @@ const PhraseDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Audio Test Component */}
+      {showAudioTest && (
+        <AudioTest
+          audioUrl={phrase!.audioUrl}
+          onClose={() => setShowAudioTest(false)}
+        />
+      )}
     </div>
   );
 };
