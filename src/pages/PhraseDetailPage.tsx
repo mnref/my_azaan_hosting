@@ -553,6 +553,7 @@ const PhraseDetailPage: React.FC = () => {
               onRecordingComplete={handleMP3RecordingComplete}
               onError={handleMP3RecordingError}
               maxDuration={getPhraseDuration(phrase.id)}
+              phraseId={phrase.id}
               autoConvert={true}
               showSettings={false}
               className="mb-6"

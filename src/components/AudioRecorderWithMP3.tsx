@@ -4,7 +4,7 @@ import { useAudioConverter } from '../hooks/useAudioConverter';
 import { ConversionResult, ConversionOptions } from '../utils/WebAudioConverter';
 import MicrophonePermissionHelper from './MicrophonePermissionHelper';
 import FFmpegDiagnostic from './FFmpegDiagnostic';
-import { getPhraseDuration, calculateRecordingTiming } from '../utils/audioDurationFix';
+import { getPhraseDuration, calculateRecordingTiming, validateAndCorrectDuration } from '../utils/audioDurationFix';
 
 export interface AudioRecorderWithMP3Props {
   onRecordingComplete?: (result: ConversionResult) => void;
@@ -14,6 +14,7 @@ export interface AudioRecorderWithMP3Props {
   showSettings?: boolean;
   className?: string;
   resetKey?: number; // Add this to force reset from parent
+  phraseId?: number; // Add phraseId for precise timing
 }
 
 export interface RecordingState {
@@ -32,7 +33,8 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
   autoConvert = true,
   showSettings = true,
   className = '',
-  resetKey = 0
+  resetKey = 0,
+  phraseId
 }) => {
   const [recordingState, setRecordingState] = useState<RecordingState>({
     isRecording: false,
@@ -61,7 +63,7 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | number | null>(null);
 
   const {
     isReady,
@@ -197,26 +199,54 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
         const audioUrl = URL.createObjectURL(webmBlob);
         console.log('📊 Recording size: ' + webmBlob.size + ' bytes');
 
-        // Use precise timing for duration calculation
-        const timing = calculateRecordingTiming(maxDuration);
-        const actualDuration = timing.targetDuration; // Use the target duration as the actual duration
+        // Get actual duration from the audio blob with better error handling
+        const audio = new Audio(audioUrl);
         
-        console.log('🎵 Using precise timing duration: ' + actualDuration + ' seconds');
-        console.log('🎵 Target duration: ' + timing.targetDuration + ' seconds');
+        const getDuration = () => {
+          return new Promise<number>((resolve) => {
+            const timeout = setTimeout(() => {
+              console.log('⚠️ Audio duration detection timed out, using target duration');
+              resolve(timing.targetDuration);
+            }, 2000); // 2 second timeout
+            
+            audio.addEventListener('loadedmetadata', () => {
+              clearTimeout(timeout);
+              const actualDuration = audio.duration;
+              console.log('🎵 Actual audio duration: ' + actualDuration + ' seconds');
+              
+              // Validate the duration
+              if (actualDuration && isFinite(actualDuration) && actualDuration > 0) {
+                resolve(actualDuration);
+              } else {
+                console.log('⚠️ Invalid duration detected, using target duration');
+                resolve(timing.targetDuration);
+              }
+            }, { once: true });
+            
+            audio.addEventListener('error', () => {
+              clearTimeout(timeout);
+              console.log('⚠️ Audio duration detection failed, using target duration');
+              resolve(timing.targetDuration);
+            }, { once: true });
+            
+            // Load the audio
+            audio.load();
+          });
+        };
+        
+        const finalDuration = await getDuration();
+        console.log('🎵 Final duration: ' + finalDuration + ' seconds (target: ' + timing.targetDuration + ')');
+        
+        // Validate and correct duration if phraseId is provided
+        const validatedDuration = phraseId ? validateAndCorrectDuration(phraseId, finalDuration) : finalDuration;
+        console.log('🎵 Validated duration: ' + validatedDuration + ' seconds');
         
         setRecordingState(prev => ({
           ...prev,
           webmBlob,
           audioUrl,
           isRecording: false,
-          duration: actualDuration
-        }));
-
-        setRecordingState(prev => ({
-          ...prev,
-          webmBlob,
-          audioUrl,
-          isRecording: false
+          duration: validatedDuration
         }));
 
         // Auto convert to MP3 if enabled
@@ -259,51 +289,54 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       };
 
       // Start MediaRecorder with timeslice for more reliable data capture
-      mediaRecorder.start(1000); // Capture data every 1 second
+      mediaRecorder.start(100); // Capture data every 100ms for better precision
       console.log('🎤 MediaRecorder started, state: ' + mediaRecorder.state);
       setRecordingState(prev => ({ ...prev, isRecording: true, duration: 0 }));
 
-      // Start bulletproof timer with precise timing
-      const timing = calculateRecordingTiming(maxDuration);
-      console.log(`⏱️ Starting bulletproof timer for ${timing.targetDuration} seconds (tolerance: ±${timing.toleranceMs}ms)...`);
+      // Start timer with precise timing using performance.now() for better accuracy
+      const timing = calculateRecordingTiming(maxDuration, phraseId); // Use phrase ID as duration
+      console.log(`⏱️ Starting timer for ${timing.targetDuration} seconds (tolerance: ±${timing.toleranceMs}ms)...`);
+      console.log(`⏱️ Timing config: target=${timing.targetDuration}s, min=${timing.minDuration}s, max=${timing.maxDuration}s`);
+      const startTime = performance.now();
       
-      const timerStartTime = performance.now();
-      let recordingStartTime: number;
-      
-      // Record the exact start time when MediaRecorder starts
-      mediaRecorder.onstart = () => {
-        recordingStartTime = performance.now();
-        console.log('🎤 MediaRecorder started, recording start time captured');
-      };
-      
-      timerRef.current = setInterval(() => {
-        const elapsedMilliseconds = performance.now() - timerStartTime;
-        const elapsedSeconds = elapsedMilliseconds / 1000;
+      // Use requestAnimationFrame for more precise timing
+      const updateTimer = () => {
+        const elapsedMilliseconds = performance.now() - startTime;
+        const elapsedDecimal = elapsedMilliseconds / 1000;
         
-        console.log(`⏱️ Timer elapsed: ${elapsedSeconds.toFixed(2)}/${timing.targetDuration} seconds`);
+        // Update duration display every 100ms for performance
+        const elapsedSeconds = Math.floor(elapsedDecimal);
+        if (elapsedSeconds !== recordingState.duration) {
+          setRecordingState(prev => ({ ...prev, duration: elapsedSeconds }));
+        }
         
-        // Update UI timer
-        setRecordingState(prev => ({ ...prev, duration: Math.floor(elapsedSeconds) }));
-        
-        // Stop exactly at target duration with no tolerance
-        if (elapsedSeconds >= timing.targetDuration) {
-          console.log(`🛑 Target duration reached (${elapsedSeconds.toFixed(2)}s >= ${timing.targetDuration}s), stopping recording...`);
+        // Check if target duration is reached with high precision
+        if (elapsedDecimal >= timing.targetDuration) {
+          console.log(`🛑 Target duration reached (${elapsedDecimal.toFixed(3)}s >= ${timing.targetDuration}s), stopping recording...`);
           
+          // Stop recording when target duration is reached
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            console.log('🛑 Stopping MediaRecorder immediately...');
+            console.log('🛑 Stopping MediaRecorder...');
             
-            // Request final data and stop immediately
+            // Request data before stopping to ensure we get the final chunk
             mediaRecorderRef.current.requestData();
+            
+            // Stop immediately for precise timing
             mediaRecorderRef.current.stop();
           }
           
-          // Clear timer
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
+          setRecordingState(prev => ({ ...prev, duration: timing.targetDuration, isRecording: false }));
+          return; // Stop the timer
         }
-      }, 50); // Check every 50ms for maximum precision
+        
+        // Continue timer if still recording
+        if (recordingState.isRecording) {
+          timerRef.current = requestAnimationFrame(updateTimer);
+        }
+      };
+      
+      // Start the precise timer
+      timerRef.current = requestAnimationFrame(updateTimer);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start recording';
@@ -315,7 +348,7 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       });
       onError?.(errorMessage);
     }
-  }, [maxDuration, autoConvert, isReady, resetError, onError]);
+  }, [maxDuration, autoConvert, isReady, resetError, onError, phraseId]);
 
   // Stop recording
   const stopRecording = useCallback(() => {
@@ -323,7 +356,12 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       mediaRecorderRef.current.stop();
     }
     if (timerRef.current) {
-      clearInterval(timerRef.current);
+      // Handle both setInterval and requestAnimationFrame
+      if (typeof timerRef.current === 'number') {
+        cancelAnimationFrame(timerRef.current);
+      } else {
+        clearInterval(timerRef.current);
+      }
       timerRef.current = null;
     }
   }, [recordingState.isRecording]);
@@ -420,7 +458,12 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
   useEffect(() => {
     return () => {
       if (timerRef.current) {
-        clearInterval(timerRef.current);
+        // Handle both setInterval and requestAnimationFrame
+        if (typeof timerRef.current === 'number') {
+          cancelAnimationFrame(timerRef.current);
+        } else {
+          clearInterval(timerRef.current);
+        }
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());

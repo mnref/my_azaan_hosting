@@ -43,15 +43,32 @@ export const getPhraseTolerance = (phraseId: number): number => {
 /**
  * Calculate precise timing for recording
  */
-export const calculateRecordingTiming = (phraseId: number) => {
-  const duration = getPhraseDuration(phraseId);
-  const tolerance = getPhraseTolerance(phraseId);
+export const calculateRecordingTiming = (duration: number, phraseId?: number) => {
+  let targetDuration: number;
+  let tolerance: number;
+  
+  if (phraseId) {
+    // Use phrase-specific configuration if phraseId is provided
+    const config = PHRASE_DURATIONS.find(p => p.phraseId === phraseId);
+    if (config) {
+      targetDuration = config.duration;
+      tolerance = config.tolerance;
+    } else {
+      // Fallback to provided duration
+      targetDuration = duration;
+      tolerance = 500; // Default tolerance
+    }
+  } else {
+    // Use provided duration directly
+    targetDuration = duration;
+    tolerance = 500; // Default tolerance
+  }
   
   return {
-    targetDuration: duration,
+    targetDuration,
     toleranceMs: tolerance,
-    maxDuration: duration + (tolerance / 1000),
-    minDuration: duration - (tolerance / 1000)
+    maxDuration: targetDuration + (tolerance / 1000),
+    minDuration: targetDuration - (tolerance / 1000)
   };
 };
 
@@ -59,7 +76,7 @@ export const calculateRecordingTiming = (phraseId: number) => {
  * Check if a recording duration is acceptable
  */
 export const isRecordingDurationValid = (phraseId: number, actualDuration: number): boolean => {
-  const timing = calculateRecordingTiming(phraseId);
+  const timing = calculateRecordingTiming(actualDuration, phraseId);
   return actualDuration >= timing.minDuration && actualDuration <= timing.maxDuration;
 };
 
@@ -70,6 +87,25 @@ export const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+/**
+ * Validate and correct recording duration to match expected phrase duration
+ */
+export const validateAndCorrectDuration = (phraseId: number, actualDuration: number): number => {
+  const targetDuration = getPhraseDuration(phraseId);
+  const tolerance = getPhraseTolerance(phraseId);
+  const minDuration = targetDuration - (tolerance / 1000);
+  const maxDuration = targetDuration + (tolerance / 1000);
+  
+  // If duration is within tolerance, return actual duration
+  if (actualDuration >= minDuration && actualDuration <= maxDuration) {
+    return actualDuration;
+  }
+  
+  // If duration is outside tolerance, return target duration
+  console.log(`⚠️ Duration ${actualDuration}s outside tolerance (${minDuration}s - ${maxDuration}s), using target ${targetDuration}s`);
+  return targetDuration;
 };
 
 /**
