@@ -4,6 +4,7 @@ import { useAudioConverter } from '../hooks/useAudioConverter';
 import { ConversionResult, ConversionOptions } from '../utils/WebAudioConverter';
 import MicrophonePermissionHelper from './MicrophonePermissionHelper';
 import FFmpegDiagnostic from './FFmpegDiagnostic';
+import { getPhraseDuration, calculateRecordingTiming } from '../utils/audioDurationFix';
 
 export interface AudioRecorderWithMP3Props {
   onRecordingComplete?: (result: ConversionResult) => void;
@@ -283,38 +284,54 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       console.log('🎤 MediaRecorder started, state: ' + mediaRecorder.state);
       setRecordingState(prev => ({ ...prev, isRecording: true, duration: 0 }));
 
-      // Start timer with precise timing
-      console.log(`⏱️ Starting timer for ${maxDuration} seconds...`);
-      const startTime = Date.now();
+      // Start timer with precise timing using performance.now() for better accuracy
+      const timing = calculateRecordingTiming(maxDuration); // Use phrase ID as duration
+      console.log(`⏱️ Starting timer for ${timing.targetDuration} seconds (tolerance: ±${timing.toleranceMs}ms)...`);
+      const startTime = performance.now();
       timerRef.current = setInterval(() => {
-        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-        console.log(`⏱️ Recording duration: ${elapsedSeconds}/${maxDuration} seconds`);
+        const elapsedMilliseconds = performance.now() - startTime;
+        const elapsedSeconds = Math.floor(elapsedMilliseconds / 1000);
+        const elapsedDecimal = elapsedMilliseconds / 1000;
         
-        if (elapsedSeconds >= maxDuration) { // Stop exactly at max duration
-          console.log(`🛑 Max duration reached (${elapsedSeconds}s >= ${maxDuration}s), stopping recording...`);
+        console.log(`⏱️ Recording duration: ${elapsedDecimal.toFixed(2)}/${timing.targetDuration} seconds`);
+        
+        // Use precise timing with tolerance
+        if (elapsedDecimal >= timing.targetDuration) {
+          console.log(`🛑 Target duration reached (${elapsedDecimal.toFixed(2)}s >= ${timing.targetDuration}s), stopping recording...`);
+          
           // Stop recording when max duration is reached
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             console.log('🛑 Stopping MediaRecorder...');
+            
             // Request data before stopping to ensure we get the final chunk
             mediaRecorderRef.current.requestData();
-            // Add a longer delay to ensure we capture the full duration
+            
+            // Use precise delay based on target duration
+            const remainingTime = Math.max(0, (timing.targetDuration * 1000) - elapsedMilliseconds);
+            const delayTime = Math.min(remainingTime + timing.toleranceMs, 1000); // Use tolerance as buffer
+            
+            console.log(`🛑 Waiting ${delayTime.toFixed(0)}ms to ensure full capture...`);
+            
             setTimeout(() => {
               if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                console.log('🛑 Final stop after delay');
                 mediaRecorderRef.current.stop();
               }
-            }, 500); // Increased to 500ms delay to ensure full capture
+            }, delayTime);
           } else {
             console.log('⚠️ MediaRecorder not in recording state:', mediaRecorderRef.current?.state);
           }
+          
           if (timerRef.current) {
             clearInterval(timerRef.current);
             timerRef.current = null;
           }
-          setRecordingState(prev => ({ ...prev, duration: maxDuration, isRecording: false }));
+          
+          setRecordingState(prev => ({ ...prev, duration: timing.targetDuration, isRecording: false }));
         } else {
           setRecordingState(prev => ({ ...prev, duration: elapsedSeconds }));
         }
-      }, 50); // Check every 50ms for more precise timing
+      }, 100); // Check every 100ms for better performance while maintaining precision
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start recording';

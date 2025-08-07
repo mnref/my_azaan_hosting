@@ -9,7 +9,8 @@ import Header from '../components/Header';
 import AudioRecorderWithMP3 from '../components/AudioRecorderWithMP3';
 import { createSafeUrl } from '../utils/proxyHelper';
 import { ConversionResult } from '../utils/WebAudioConverter';
-import AudioTest from '../components/AudioTest';
+import { createReliableAudioURL } from '../utils/firebaseStorageHelper';
+import { getPhraseDuration } from '../utils/audioDurationFix';
 
 // REMOVE: FFmpegConverter class and all ffmpeg/MP3 conversion logic
 
@@ -39,7 +40,6 @@ const PhraseDetailPage: React.FC = () => {
   const [showHowToUse, setShowHowToUse] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const [referenceAudioFailed, setReferenceAudioFailed] = useState(false);
-  const [showAudioTest, setShowAudioTest] = useState(false);
   
   // Custom audio player state for reference audio
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -348,51 +348,23 @@ const PhraseDetailPage: React.FC = () => {
 
 
 
-  // Load reference audio with better error handling
+  // Load reference audio using Firebase SDK for reliable access
   useEffect(() => {
     const loadReferenceAudio = async () => {
       try {
-        console.log('🎵 Loading server reference audio...');
+        console.log('🎵 Loading reference audio using Firebase SDK...');
         
-        // Try multiple approaches for loading audio
-        const approaches = [
-          // Approach 1: Direct Firebase URL with cache busting
-          () => `${phrase!.audioUrl}?_cb=${Date.now()}`,
-          // Approach 2: Original URL
-          () => phrase!.audioUrl,
-          // Approach 3: URL with different cache busting
-          () => `${phrase!.audioUrl}&_cb=${Date.now()}`
-        ];
-
-        for (let i = 0; i < approaches.length; i++) {
-          try {
-            const testUrl = approaches[i]();
-            console.log(`🎵 Trying approach ${i + 1}:`, testUrl);
-            
-            // Test if the URL is accessible
-            const response = await fetch(testUrl, { 
-              method: 'HEAD',
-              mode: 'cors'
-            });
-            
-            if (response.ok) {
-              setReferenceAudioUrl(testUrl);
-              console.log(`✅ Reference audio URL set (approach ${i + 1}):`, testUrl);
-              return;
-            }
-          } catch (error) {
-            console.log(`❌ Approach ${i + 1} failed:`, error);
-            continue;
-          }
-        }
-        
-        // If all approaches fail, use the original URL
-        console.log('⚠️ All approaches failed, using original URL');
-        setReferenceAudioUrl(phrase!.audioUrl);
+        // Use the new Firebase helper for reliable audio URLs
+        const reliableUrl = await createReliableAudioURL(phrase!.audioUrl);
+        setReferenceAudioUrl(reliableUrl);
+        console.log('✅ Reference audio URL set:', reliableUrl);
         
       } catch (error) {
-        console.error('Failed to load server reference audio:', error);
-        setReferenceAudioUrl(phrase!.audioUrl);
+        console.error('Failed to load reference audio:', error);
+        // Fallback to original URL with cache busting
+        const fallbackUrl = `${phrase!.audioUrl}?_cb=${Date.now()}`;
+        setReferenceAudioUrl(fallbackUrl);
+        console.log('🔄 Using fallback URL:', fallbackUrl);
       }
     };
 
@@ -550,13 +522,6 @@ const PhraseDetailPage: React.FC = () => {
                 <span className="text-amber-500">You can still record and analyze your voice!</span>
                 <br/>
                 <span className="text-amber-400">💡 Tip: Watch the expert demonstration video for guidance</span>
-                <br/>
-                <button
-                  onClick={() => setShowAudioTest(true)}
-                  className="text-blue-600 hover:text-blue-800 underline mt-1"
-                >
-                  🔧 Test Audio Connection
-                </button>
               </div>
             )}
             <input
@@ -587,7 +552,7 @@ const PhraseDetailPage: React.FC = () => {
             <AudioRecorderWithMP3
               onRecordingComplete={handleMP3RecordingComplete}
               onError={handleMP3RecordingError}
-              maxDuration={phrase?.duration || 9} // Use dynamic duration from phrase data
+              maxDuration={getPhraseDuration(phrase.id)}
               autoConvert={true}
               showSettings={false}
               className="mb-6"
@@ -845,13 +810,7 @@ const PhraseDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Audio Test Component */}
-      {showAudioTest && (
-        <AudioTest
-          audioUrl={phrase!.audioUrl}
-          onClose={() => setShowAudioTest(false)}
-        />
-      )}
+
     </div>
   );
 };
