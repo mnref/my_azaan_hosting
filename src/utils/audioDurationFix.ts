@@ -12,16 +12,16 @@ export const PHRASE_DURATIONS: PhraseDurationConfig[] = [
   { phraseId: 2, duration: 8, tolerance: 500 },
   { phraseId: 3, duration: 8, tolerance: 500 },
   { phraseId: 4, duration: 9, tolerance: 500 },
-  { phraseId: 5, duration: 7, tolerance: 500 },
-  { phraseId: 6, duration: 7, tolerance: 500 },
-  { phraseId: 7, duration: 8, tolerance: 500 },
-  { phraseId: 8, duration: 8, tolerance: 500 },
-  { phraseId: 9, duration: 8, tolerance: 500 },
-  { phraseId: 10, duration: 8, tolerance: 500 },
-  { phraseId: 11, duration: 6, tolerance: 500 },
-  { phraseId: 12, duration: 6, tolerance: 500 },
-  { phraseId: 13, duration: 6, tolerance: 500 },
-  { phraseId: 14, duration: 8, tolerance: 500 }
+  { phraseId: 5, duration: 9, tolerance: 500 },
+  { phraseId: 6, duration: 9, tolerance: 500 },
+  { phraseId: 7, duration: 7, tolerance: 500 },
+  { phraseId: 8, duration: 7, tolerance: 500 },
+  { phraseId: 9, duration: 6, tolerance: 500 },
+  { phraseId: 10, duration: 7, tolerance: 500 },
+  { phraseId: 11, duration: 11, tolerance: 500 },
+  { phraseId: 12, duration: 9, tolerance: 500 },
+  { phraseId: 13, duration: 8, tolerance: 500 },
+  { phraseId: 14, duration: 9, tolerance: 500 }
 ];
 
 /**
