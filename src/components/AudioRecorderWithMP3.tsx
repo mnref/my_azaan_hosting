@@ -64,6 +64,8 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<NodeJS.Timeout | number | null>(null);
+  const isRecordingRef = useRef<boolean>(false); // Add ref to track recording state
+  const backupTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Backup timeout for auto-stop
 
   const {
     isReady,
@@ -292,6 +294,7 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       mediaRecorder.start(100); // Capture data every 100ms for better precision
       console.log('🎤 MediaRecorder started, state: ' + mediaRecorder.state);
       setRecordingState(prev => ({ ...prev, isRecording: true, duration: 0 }));
+      isRecordingRef.current = true; // Set ref to track recording state
 
       // Start timer with precise timing using performance.now() for better accuracy
       const timing = calculateRecordingTiming(maxDuration, phraseId); // Use phrase ID as duration
@@ -314,9 +317,9 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
         if (elapsedDecimal >= timing.targetDuration) {
           console.log(`🛑 Target duration reached (${elapsedDecimal.toFixed(3)}s >= ${timing.targetDuration}s), stopping recording...`);
           
-          // Stop recording when target duration is reached
+          // Stop recording immediately when target duration is reached
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            console.log('🛑 Stopping MediaRecorder...');
+            console.log('🛑 Stopping MediaRecorder immediately...');
             
             // Request data before stopping to ensure we get the final chunk
             mediaRecorderRef.current.requestData();
@@ -325,18 +328,76 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
             mediaRecorderRef.current.stop();
           }
           
+          // Update state and ref immediately
+          isRecordingRef.current = false;
           setRecordingState(prev => ({ ...prev, duration: timing.targetDuration, isRecording: false }));
+          
+          // Stop the timer
+          if (timerRef.current) {
+            if (typeof timerRef.current === 'number') {
+              cancelAnimationFrame(timerRef.current);
+            } else {
+              clearInterval(timerRef.current);
+            }
+            timerRef.current = null;
+          }
           return; // Stop the timer
         }
         
-        // Continue timer if still recording
-        if (recordingState.isRecording) {
+        // Continue timer if still recording (use ref for reliable state)
+        if (isRecordingRef.current) {
           timerRef.current = requestAnimationFrame(updateTimer);
         }
       };
       
       // Start the precise timer
       timerRef.current = requestAnimationFrame(updateTimer);
+      
+      // Add backup timeout to ensure recording stops after max duration
+      const backupTimeoutMs = (timing.targetDuration + 1) * 1000; // Add 1 second buffer
+      console.log(`⏰ Setting backup timeout for ${backupTimeoutMs}ms (${timing.targetDuration + 1}s)`);
+      
+      backupTimeoutRef.current = setTimeout(() => {
+        console.log('⏰ Backup timeout triggered - forcing recording stop');
+        if (isRecordingRef.current && mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          console.log('🛑 Backup timeout: Stopping MediaRecorder...');
+          mediaRecorderRef.current.requestData();
+          mediaRecorderRef.current.stop();
+          
+          // Update state
+          isRecordingRef.current = false;
+          setRecordingState(prev => ({ ...prev, duration: timing.targetDuration, isRecording: false }));
+        }
+        
+        // Clear timer
+        if (timerRef.current) {
+          if (typeof timerRef.current === 'number') {
+            cancelAnimationFrame(timerRef.current);
+          } else {
+            clearInterval(timerRef.current);
+          }
+          timerRef.current = null;
+        }
+      }, backupTimeoutMs);
+      
+      // Add periodic check to ensure recording stops
+      const periodicCheckInterval = setInterval(() => {
+        if (isRecordingRef.current && mediaRecorderRef.current) {
+          const elapsed = (performance.now() - startTime) / 1000;
+          if (elapsed >= timing.targetDuration + 0.5) { // Allow 0.5s buffer
+            console.log(`🔄 Periodic check: Recording exceeded ${timing.targetDuration}s (${elapsed.toFixed(2)}s), forcing stop`);
+            if (mediaRecorderRef.current.state === 'recording') {
+              mediaRecorderRef.current.requestData();
+              mediaRecorderRef.current.stop();
+            }
+            isRecordingRef.current = false;
+            setRecordingState(prev => ({ ...prev, duration: timing.targetDuration, isRecording: false }));
+            clearInterval(periodicCheckInterval);
+          }
+        } else {
+          clearInterval(periodicCheckInterval);
+        }
+      }, 500); // Check every 500ms
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start recording';
@@ -352,9 +413,19 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
 
   // Stop recording
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && recordingState.isRecording) {
+    console.log('🛑 Manual stop recording called');
+    
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      console.log('🛑 Stopping MediaRecorder manually...');
+      mediaRecorderRef.current.requestData();
       mediaRecorderRef.current.stop();
     }
+    
+    // Update ref and state
+    isRecordingRef.current = false;
+    setRecordingState(prev => ({ ...prev, isRecording: false }));
+    
+    // Clear timers
     if (timerRef.current) {
       // Handle both setInterval and requestAnimationFrame
       if (typeof timerRef.current === 'number') {
@@ -364,7 +435,13 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       }
       timerRef.current = null;
     }
-  }, [recordingState.isRecording]);
+    
+    // Clear backup timeout
+    if (backupTimeoutRef.current) {
+      clearTimeout(backupTimeoutRef.current);
+      backupTimeoutRef.current = null;
+    }
+  }, []);
 
   // Convert to MP3
   const convertToMP3 = useCallback(async (webmBlob: Blob) => {
@@ -410,6 +487,25 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
+    
+    // Clear timers
+    if (timerRef.current) {
+      if (typeof timerRef.current === 'number') {
+        cancelAnimationFrame(timerRef.current);
+      } else {
+        clearInterval(timerRef.current);
+      }
+      timerRef.current = null;
+    }
+    
+    // Clear backup timeout
+    if (backupTimeoutRef.current) {
+      clearTimeout(backupTimeoutRef.current);
+      backupTimeoutRef.current = null;
+    }
+    
+    // Update ref
+    isRecordingRef.current = false;
     
     // Clean up URLs
     if (recordingState.audioUrl) URL.revokeObjectURL(recordingState.audioUrl);
@@ -464,6 +560,9 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
         } else {
           clearInterval(timerRef.current);
         }
+      }
+      if (backupTimeoutRef.current) {
+        clearTimeout(backupTimeoutRef.current);
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
