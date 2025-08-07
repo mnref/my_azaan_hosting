@@ -197,41 +197,20 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
         const audioUrl = URL.createObjectURL(webmBlob);
         console.log('📊 Recording size: ' + webmBlob.size + ' bytes');
 
-        // Get actual duration from the audio blob
-        const audio = new Audio(audioUrl);
-        audio.addEventListener('loadedmetadata', () => {
-          const actualDuration = Math.round(audio.duration);
-          console.log('🎵 Actual audio duration: ' + actualDuration + ' seconds');
-          
-          // Use the actual recorded duration, but ensure it doesn't exceed maxDuration
-          let finalDuration = Math.min(actualDuration, maxDuration);
-          
-          // If actual duration is invalid, use maxDuration
-          if (!actualDuration || !isFinite(actualDuration) || actualDuration <= 0) {
-            finalDuration = maxDuration;
-          }
-          
-          console.log('🎵 Final duration: ' + finalDuration + ' seconds (maxDuration: ' + maxDuration + ')');
-          setRecordingState(prev => ({
-            ...prev,
-            webmBlob,
-            audioUrl,
-            isRecording: false,
-            duration: finalDuration
-          }));
-        });
+        // Use precise timing for duration calculation
+        const timing = calculateRecordingTiming(maxDuration);
+        const actualDuration = timing.targetDuration; // Use the target duration as the actual duration
         
-        // Handle audio loading errors
-        audio.addEventListener('error', () => {
-          console.log('🎵 Audio duration detection failed, using maxDuration: ' + maxDuration + ' seconds');
-          setRecordingState(prev => ({
-            ...prev,
-            webmBlob,
-            audioUrl,
-            isRecording: false,
-            duration: maxDuration
-          }));
-        });
+        console.log('🎵 Using precise timing duration: ' + actualDuration + ' seconds');
+        console.log('🎵 Target duration: ' + timing.targetDuration + ' seconds');
+        
+        setRecordingState(prev => ({
+          ...prev,
+          webmBlob,
+          audioUrl,
+          isRecording: false,
+          duration: actualDuration
+        }));
 
         setRecordingState(prev => ({
           ...prev,
@@ -284,54 +263,47 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
       console.log('🎤 MediaRecorder started, state: ' + mediaRecorder.state);
       setRecordingState(prev => ({ ...prev, isRecording: true, duration: 0 }));
 
-      // Start timer with precise timing using performance.now() for better accuracy
-      const timing = calculateRecordingTiming(maxDuration); // Use phrase ID as duration
-      console.log(`⏱️ Starting timer for ${timing.targetDuration} seconds (tolerance: ±${timing.toleranceMs}ms)...`);
-      const startTime = performance.now();
+      // Start bulletproof timer with precise timing
+      const timing = calculateRecordingTiming(maxDuration);
+      console.log(`⏱️ Starting bulletproof timer for ${timing.targetDuration} seconds (tolerance: ±${timing.toleranceMs}ms)...`);
+      
+      const timerStartTime = performance.now();
+      let recordingStartTime: number;
+      
+      // Record the exact start time when MediaRecorder starts
+      mediaRecorder.onstart = () => {
+        recordingStartTime = performance.now();
+        console.log('🎤 MediaRecorder started, recording start time captured');
+      };
+      
       timerRef.current = setInterval(() => {
-        const elapsedMilliseconds = performance.now() - startTime;
-        const elapsedSeconds = Math.floor(elapsedMilliseconds / 1000);
-        const elapsedDecimal = elapsedMilliseconds / 1000;
+        const elapsedMilliseconds = performance.now() - timerStartTime;
+        const elapsedSeconds = elapsedMilliseconds / 1000;
         
-        console.log(`⏱️ Recording duration: ${elapsedDecimal.toFixed(2)}/${timing.targetDuration} seconds`);
+        console.log(`⏱️ Timer elapsed: ${elapsedSeconds.toFixed(2)}/${timing.targetDuration} seconds`);
         
-        // Use precise timing with tolerance
-        if (elapsedDecimal >= timing.targetDuration) {
-          console.log(`🛑 Target duration reached (${elapsedDecimal.toFixed(2)}s >= ${timing.targetDuration}s), stopping recording...`);
+        // Update UI timer
+        setRecordingState(prev => ({ ...prev, duration: Math.floor(elapsedSeconds) }));
+        
+        // Stop exactly at target duration with no tolerance
+        if (elapsedSeconds >= timing.targetDuration) {
+          console.log(`🛑 Target duration reached (${elapsedSeconds.toFixed(2)}s >= ${timing.targetDuration}s), stopping recording...`);
           
-          // Stop recording when max duration is reached
           if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            console.log('🛑 Stopping MediaRecorder...');
+            console.log('🛑 Stopping MediaRecorder immediately...');
             
-            // Request data before stopping to ensure we get the final chunk
+            // Request final data and stop immediately
             mediaRecorderRef.current.requestData();
-            
-            // Use precise delay based on target duration
-            const remainingTime = Math.max(0, (timing.targetDuration * 1000) - elapsedMilliseconds);
-            const delayTime = Math.min(remainingTime + timing.toleranceMs, 1000); // Use tolerance as buffer
-            
-            console.log(`🛑 Waiting ${delayTime.toFixed(0)}ms to ensure full capture...`);
-            
-            setTimeout(() => {
-              if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-                console.log('🛑 Final stop after delay');
-                mediaRecorderRef.current.stop();
-              }
-            }, delayTime);
-          } else {
-            console.log('⚠️ MediaRecorder not in recording state:', mediaRecorderRef.current?.state);
+            mediaRecorderRef.current.stop();
           }
           
+          // Clear timer
           if (timerRef.current) {
             clearInterval(timerRef.current);
             timerRef.current = null;
           }
-          
-          setRecordingState(prev => ({ ...prev, duration: timing.targetDuration, isRecording: false }));
-        } else {
-          setRecordingState(prev => ({ ...prev, duration: elapsedSeconds }));
         }
-      }, 100); // Check every 100ms for better performance while maintaining precision
+      }, 50); // Check every 50ms for maximum precision
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start recording';
