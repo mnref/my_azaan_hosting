@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle, XCircle, Info, RefreshCw } from 'lucide-react';
-import { AudioConverter } from '../utils/AudioConverter';
+import { WebAudioConverter } from '../utils/WebAudioConverter';
 
 interface FFmpegDiagnosticProps {
   onClose: () => void;
@@ -22,73 +22,74 @@ const FFmpegDiagnostic: React.FC<FFmpegDiagnosticProps> = ({ onClose }) => {
     setIsRunning(true);
     const diagnosticResults: DiagnosticResult[] = [];
 
-    // 1. Check SharedArrayBuffer support
-    const sharedArrayBufferSupported = typeof SharedArrayBuffer !== 'undefined';
-    diagnosticResults.push({
-      name: 'SharedArrayBuffer Support',
-      status: sharedArrayBufferSupported ? 'pass' : 'fail',
-      message: sharedArrayBufferSupported ? 'Supported' : 'Not supported',
-      details: sharedArrayBufferSupported 
-        ? 'Your browser supports SharedArrayBuffer, which is required for FFmpeg.wasm'
-        : 'SharedArrayBuffer is required for FFmpeg.wasm but not supported in your browser. This is the main reason MP3 conversion is not working.'
-    });
+         // 1. Check Web Audio API support
+     const webAudioSupported = typeof window.AudioContext !== 'undefined' || typeof (window as any).webkitAudioContext !== 'undefined';
+     diagnosticResults.push({
+       name: 'Web Audio API Support',
+       status: webAudioSupported ? 'pass' : 'fail',
+       message: webAudioSupported ? 'Supported' : 'Not supported',
+       details: webAudioSupported 
+         ? 'Web Audio API is supported and will be used for audio conversion'
+         : 'Web Audio API is required for audio conversion but not supported in your browser'
+     });
 
-    // 2. Check HTTPS
-    const isHttps = window.location.protocol === 'https:';
-    diagnosticResults.push({
-      name: 'HTTPS Connection',
-      status: isHttps ? 'pass' : 'fail',
-      message: isHttps ? 'Secure connection' : 'Not secure',
-      details: isHttps 
-        ? 'HTTPS is required for SharedArrayBuffer and FFmpeg.wasm'
-        : 'SharedArrayBuffer requires HTTPS. Please use a secure connection.'
-    });
+         // 2. Check HTTPS
+     const isHttps = window.location.protocol === 'https:';
+     diagnosticResults.push({
+       name: 'HTTPS Connection',
+       status: isHttps ? 'pass' : 'fail',
+       message: isHttps ? 'Secure connection' : 'Not secure',
+       details: isHttps 
+         ? 'HTTPS is required for Web Audio API and microphone access'
+         : 'HTTPS is required for Web Audio API and microphone access. Please use a secure connection.'
+     });
 
-    // 3. Check Cross-Origin Isolation headers
-    const crossOriginIsolated = (self as any).crossOriginIsolated;
-    diagnosticResults.push({
-      name: 'Cross-Origin Isolation',
-      status: crossOriginIsolated ? 'pass' : 'fail',
-      message: crossOriginIsolated ? 'Enabled' : 'Not enabled',
-      details: crossOriginIsolated 
-        ? 'Cross-origin isolation is enabled, allowing SharedArrayBuffer'
-        : 'Cross-origin isolation headers are required for SharedArrayBuffer. This needs to be configured on the server.'
-    });
+         // 3. Check MediaRecorder support
+     const mediaRecorderSupported = typeof window.MediaRecorder !== 'undefined';
+     diagnosticResults.push({
+       name: 'MediaRecorder Support',
+       status: mediaRecorderSupported ? 'pass' : 'fail',
+       message: mediaRecorderSupported ? 'Supported' : 'Not supported',
+       details: mediaRecorderSupported 
+         ? 'MediaRecorder API is supported for audio recording and conversion'
+         : 'MediaRecorder API is required for audio recording but not supported in your browser'
+     });
 
-    // 4. Check FFmpeg.wasm availability
+         // 4. Check AudioContext creation
+     try {
+       const testContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+       await testContext.close();
+       diagnosticResults.push({
+         name: 'AudioContext Creation',
+         status: 'pass',
+         message: 'Working',
+         details: 'AudioContext can be created and closed successfully'
+       });
+     } catch (error) {
+       diagnosticResults.push({
+         name: 'AudioContext Creation',
+         status: 'fail',
+         message: 'Failed',
+         details: `Failed to create AudioContext: ${error instanceof Error ? error.message : 'Unknown error'}`
+       });
+     }
+
+    // 5. Check WebAudioConverter initialization
     try {
-      const { createFFmpeg } = await import('@ffmpeg/ffmpeg');
-      diagnosticResults.push({
-        name: 'FFmpeg.wasm Library',
-        status: 'pass',
-        message: 'Available',
-        details: 'FFmpeg.wasm library is loaded successfully'
-      });
-    } catch (error) {
-      diagnosticResults.push({
-        name: 'FFmpeg.wasm Library',
-        status: 'fail',
-        message: 'Not available',
-        details: `Failed to load FFmpeg.wasm: ${error instanceof Error ? error.message : 'Unknown error'}`
-      });
-    }
-
-    // 5. Check AudioConverter initialization
-    try {
-      const converter = AudioConverter.getInstance();
+      const converter = WebAudioConverter.getInstance();
       const status = converter.getStatus();
       diagnosticResults.push({
-        name: 'AudioConverter Status',
+        name: 'WebAudioConverter Status',
         status: status.isInitialized ? 'pass' : 'warning',
         message: status.isInitialized ? 'Initialized' : 'Not initialized',
-        details: `Initialized: ${status.isInitialized}, Initializing: ${status.isInitializing}, FFmpeg loaded: ${status.ffmpegLoaded}`
+        details: `Initialized: ${status.isInitialized}, AudioContext created: ${status.audioContextCreated}`
       });
     } catch (error) {
       diagnosticResults.push({
-        name: 'AudioConverter Status',
+        name: 'WebAudioConverter Status',
         status: 'fail',
         message: 'Failed to check',
-        details: `Error checking AudioConverter: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Error checking WebAudioConverter: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
     }
 
@@ -166,31 +167,36 @@ const FFmpegDiagnostic: React.FC<FFmpegDiagnosticProps> = ({ onClose }) => {
     }
   };
 
-  const getSolutions = () => {
-    const solutions: string[] = [];
-    
-    const sharedArrayBufferFailed = results.find(r => r.name === 'SharedArrayBuffer Support')?.status === 'fail';
-    const httpsFailed = results.find(r => r.name === 'HTTPS Connection')?.status === 'fail';
-    const crossOriginFailed = results.find(r => r.name === 'Cross-Origin Isolation')?.status === 'fail';
+     const getSolutions = () => {
+     const solutions: string[] = [];
+     
+     const webAudioFailed = results.find(r => r.name === 'Web Audio API Support')?.status === 'fail';
+     const httpsFailed = results.find(r => r.name === 'HTTPS Connection')?.status === 'fail';
+     const mediaRecorderFailed = results.find(r => r.name === 'MediaRecorder Support')?.status === 'fail';
+     const audioContextFailed = results.find(r => r.name === 'AudioContext Creation')?.status === 'fail';
 
-    if (sharedArrayBufferFailed) {
-      solutions.push('• SharedArrayBuffer is not supported in your browser. This is the main issue preventing MP3 conversion.');
-    }
-    
-    if (httpsFailed) {
-      solutions.push('• Use HTTPS instead of HTTP. SharedArrayBuffer requires a secure connection.');
-    }
-    
-    if (crossOriginFailed) {
-      solutions.push('• The server needs to send Cross-Origin Isolation headers (Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy).');
-    }
+     if (webAudioFailed) {
+       solutions.push('• Web Audio API is not supported in your browser. This is required for audio conversion.');
+     }
+     
+     if (httpsFailed) {
+       solutions.push('• Use HTTPS instead of HTTP. Web Audio API and microphone access require a secure connection.');
+     }
+     
+     if (mediaRecorderFailed) {
+       solutions.push('• MediaRecorder API is not supported in your browser. This is required for audio recording.');
+     }
 
-    if (solutions.length === 0) {
-      solutions.push('• All checks passed. If MP3 conversion still doesn\'t work, try refreshing the page or using a different browser.');
-    }
+     if (audioContextFailed) {
+       solutions.push('• AudioContext creation failed. This may be due to browser restrictions or audio device issues.');
+     }
 
-    return solutions;
-  };
+     if (solutions.length === 0) {
+       solutions.push('• All checks passed. If audio conversion still doesn\'t work, try refreshing the page or using a different browser.');
+     }
+
+     return solutions;
+   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -198,9 +204,9 @@ const FFmpegDiagnostic: React.FC<FFmpegDiagnosticProps> = ({ onClose }) => {
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center space-x-3">
             <Info className="w-6 h-6 text-blue-500" />
-            <h3 className="text-xl font-semibold text-gray-900">
-              FFmpeg Diagnostic Results
-            </h3>
+                         <h3 className="text-xl font-semibold text-gray-900">
+               Audio Conversion Diagnostic Results
+             </h3>
           </div>
           <button
             onClick={onClose}
@@ -223,11 +229,11 @@ const FFmpegDiagnostic: React.FC<FFmpegDiagnosticProps> = ({ onClose }) => {
                    overallStatus === 'warning' ? 'Some Issues Detected' :
                    'Critical Issues Found'}
                 </h4>
-                <p className="text-sm text-gray-600">
-                  {overallStatus === 'pass' ? 'FFmpeg should work properly' :
-                   overallStatus === 'warning' ? 'FFmpeg may have limited functionality' :
-                   'FFmpeg will not work without resolving these issues'}
-                </p>
+                                 <p className="text-sm text-gray-600">
+                   {overallStatus === 'pass' ? 'Audio conversion should work properly' :
+                    overallStatus === 'warning' ? 'Audio conversion may have limited functionality' :
+                    'Audio conversion will not work without resolving these issues'}
+                 </p>
               </div>
             </div>
           </div>

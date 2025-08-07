@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Mic, Square, Play, Pause, Settings, Loader2, Volume2, VolumeX, AlertCircle, X, MicOff, CheckCircle, RotateCcw, Wrench, AlertTriangle } from 'lucide-react';
 import { useAudioConverter } from '../hooks/useAudioConverter';
-import { ConversionResult, ConversionOptions } from '../utils/AudioConverter';
+import { ConversionResult, ConversionOptions } from '../utils/WebAudioConverter';
 import MicrophonePermissionHelper from './MicrophonePermissionHelper';
 import FFmpegDiagnostic from './FFmpegDiagnostic';
 
@@ -244,7 +244,7 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
           console.log('🔄 Auto-converting to MP3...');
           await convertToMP3(webmBlob);
         } else if (autoConvert && !isReady) {
-          console.log('⚠️ FFmpeg not ready, storing WebM recording without conversion');
+          console.log('⚠️ Audio converter not ready, storing WebM recording without conversion');
           // Store WebM recording without conversion
           setRecordingState(prev => ({
             ...prev,
@@ -605,21 +605,21 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
           </div>
         )}
 
-        {/* FFmpeg Not Ready Warning */}
+        {/* Audio Converter Not Ready Warning */}
         {!isReady && !recordingState.mp3Url && (
           <div className="w-full max-w-md p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-start space-x-3">
               <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
               <div className="flex-1">
-                <h4 className="text-sm font-medium text-yellow-800">MP3 Conversion Not Available</h4>
+                <h4 className="text-sm font-medium text-yellow-800">Audio Conversion Not Available</h4>
                 <p className="text-xs text-yellow-700 mt-1">
-                  Your recording will be saved in WebM format. MP3 conversion requires additional browser support.
+                  Your recording will be saved in WebM format. Audio conversion requires additional browser support.
                 </p>
                 <button
                   onClick={() => setShowFFmpegDiagnostic(true)}
                   className="text-xs text-blue-600 hover:text-blue-800 underline mt-2"
                 >
-                  Learn how to enable MP3 conversion
+                  Learn how to enable audio conversion
                 </button>
               </div>
             </div>
@@ -638,15 +638,15 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
             </button>
           )}
           
-          {/* FFmpeg Diagnostic Button - Show when FFmpeg is not ready */}
+          {/* Audio Converter Diagnostic Button - Show when converter is not ready */}
           {!isReady && (
             <button
               onClick={() => setShowFFmpegDiagnostic(true)}
               className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors flex items-center gap-2"
-              title="FFmpeg is not working. Click to diagnose the issue."
+              title="Audio converter is not working. Click to diagnose the issue."
             >
               <Wrench className="w-4 h-4" />
-              <span>Fix MP3 Conversion</span>
+              <span>Fix Audio Conversion</span>
             </button>
           )}
         </div>
@@ -664,7 +664,7 @@ const AudioRecorderWithMP3: React.FC<AudioRecorderWithMP3Props> = ({
         />
       )}
 
-      {/* FFmpeg Diagnostic */}
+      {/* Audio Converter Diagnostic */}
       {showFFmpegDiagnostic && (
         <FFmpegDiagnostic
           onClose={() => setShowFFmpegDiagnostic(false)}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { AudioConverter, ConversionOptions, ConversionProgress, ConversionResult } from '../utils/AudioConverter';
+import { WebAudioConverter, ConversionOptions, ConversionProgress, ConversionResult } from '../utils/WebAudioConverter';
 
 export interface UseAudioConverterState {
   isInitializing: boolean;
@@ -31,7 +31,7 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
     progress: null
   });
 
-  const audioConverterRef = useRef<AudioConverter | null>(null);
+  const audioConverterRef = useRef<WebAudioConverter | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Initialize AudioConverter on mount
@@ -41,11 +41,11 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
         console.log('🔧 Starting AudioConverter initialization...');
         setState(prev => ({ ...prev, isInitializing: true, error: null }));
         
-        audioConverterRef.current = AudioConverter.getInstance();
-        console.log('🔧 AudioConverter instance created');
+        audioConverterRef.current = WebAudioConverter.getInstance();
+        console.log('🔧 WebAudioConverter instance created');
         
         const isSupported = await audioConverterRef.current.isSupported();
-        console.log('🔧 FFmpeg support check result:', isSupported);
+        console.log('🔧 WebAudioConverter support check result:', isSupported);
         
         setState(prev => ({
           ...prev,
@@ -82,16 +82,16 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
 
   const checkSupport = useCallback(async (): Promise<boolean> => {
     try {
-      console.log('🔧 Checking FFmpeg.wasm support...');
+      console.log('🔧 Checking WebAudioConverter support...');
       if (!audioConverterRef.current) {
-        audioConverterRef.current = AudioConverter.getInstance();
+        audioConverterRef.current = WebAudioConverter.getInstance();
       }
       const isSupported = await audioConverterRef.current.isSupported();
-      console.log('✅ FFmpeg.wasm support:', isSupported);
+      console.log('✅ WebAudioConverter support:', isSupported);
       setState(prev => ({ ...prev, isSupported, isReady: isSupported }));
       return isSupported;
     } catch (error) {
-      console.error('❌ FFmpeg.wasm support check failed:', error);
+      console.error('❌ WebAudioConverter support check failed:', error);
       setState(prev => ({
         ...prev,
         isSupported: false,
@@ -111,9 +111,9 @@ export const useAudioConverter = (): UseAudioConverterReturn => {
       throw new Error('Audio converter not initialized');
     }
 
-    // Ensure FFmpeg is ready before conversion
+    // Ensure WebAudioConverter is ready before conversion
     if (!state.isReady) {
-      console.log('🔄 FFmpeg not ready, initializing...');
+      console.log('🔄 WebAudioConverter not ready, initializing...');
       await audioConverterRef.current.initialize();
       setState(prev => ({ ...prev, isReady: true }));
     }
