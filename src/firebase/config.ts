@@ -1,8 +1,8 @@
 // Firebase configuration
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 console.log('🔥 Initializing Firebase...');
 
@@ -16,10 +16,10 @@ const firebaseConfig = {
   measurementId: "G-18EJSHEGML"
 };
 
-let app;
-let auth;
-let db;
-let storage;
+let app: any;
+let auth: Auth;
+let db: Firestore;
+let storage: FirebaseStorage;
 
 try {
   app = initializeApp(firebaseConfig);

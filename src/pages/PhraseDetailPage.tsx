@@ -9,7 +9,7 @@ import Header from '../components/Header';
 import AudioRecorderWithMP3 from '../components/AudioRecorderWithMP3';
 import { createSafeUrl } from '../utils/proxyHelper';
 import { ConversionResult } from '../utils/WebAudioConverter';
-import { createReliableAudioURL } from '../utils/firebaseStorageHelper';
+
 import { getPhraseDuration } from '../utils/audioDurationFix';
 
 // REMOVE: FFmpegConverter class and all ffmpeg/MP3 conversion logic
@@ -27,7 +27,7 @@ const PhraseDetailPage: React.FC = () => {
 
   // MP3 Recording state
   const [mp3Blob, setMp3Blob] = useState<Blob | null>(null);
-  const [mp3Url, setMp3Url] = useState<string | null>(null);
+
   const [showAnalyze, setShowAnalyze] = useState(false);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [analyzeMessage, setAnalyzeMessage] = useState<string | null>(null);
@@ -39,10 +39,10 @@ const PhraseDetailPage: React.FC = () => {
   const [conversionLoading, setConversionLoading] = useState(false);
   const [showHowToUse, setShowHowToUse] = useState(false);
   const [resetKey, setResetKey] = useState(0);
-  const [referenceAudioFailed, setReferenceAudioFailed] = useState(false);
+
   
   // Custom audio player state for reference audio
-  const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const referenceAudioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const [refAudioPlaying, setRefAudioPlaying] = useState(false);
   const [refAudioCurrent, setRefAudioCurrent] = useState(0);
@@ -93,7 +93,6 @@ const PhraseDetailPage: React.FC = () => {
     console.log('🎵 Audio duration: ' + result.duration + ' seconds');
     
     setMp3Blob(result.mp3Blob);
-    setMp3Url(URL.createObjectURL(result.mp3Blob));
     setShowAnalyze(true);
     setAnalyzeLoading(false);
     setConversionLoading(false);
@@ -108,7 +107,6 @@ const PhraseDetailPage: React.FC = () => {
   const handleClear = useCallback(() => {
     // Clear MP3 recording
     setMp3Blob(null);
-    setMp3Url(null);
     setShowAnalyze(false);
     
     // Clear analysis results
@@ -120,7 +118,6 @@ const PhraseDetailPage: React.FC = () => {
     setAnalyzeMessage(null);
     setAnalyzeLoading(false);
     setConversionLoading(false);
-    setReferenceAudioFailed(false);
     
     // Reset the AudioRecorderWithMP3 component
     setResetKey(prev => prev + 1);
@@ -495,7 +492,6 @@ const PhraseDetailPage: React.FC = () => {
                     console.log('❌ Audio failed to load even with direct URL');
                     // Show a message to the user about CORS issue
                     setAnalyzeMessage('Reference audio is temporarily unavailable due to server configuration. You can still record and analyze your pronunciation.');
-                    setReferenceAudioFailed(true);
                   }
                 }}
                 preload="metadata"
