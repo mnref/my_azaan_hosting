@@ -348,16 +348,16 @@ const PhraseDetailPage: React.FC = () => {
 
 
 
-  // Load reference audio using Firebase SDK for reliable access
+  // Load reference audio using direct URL approach to bypass CORS
   useEffect(() => {
     const loadReferenceAudio = async () => {
       try {
-        console.log('🎵 Loading reference audio using Firebase SDK...');
+        console.log('🎵 Loading reference audio with direct URL approach...');
         
-        // Use the new Firebase helper for reliable audio URLs
-        const reliableUrl = await createReliableAudioURL(phrase!.audioUrl);
-        setReferenceAudioUrl(reliableUrl);
-        console.log('✅ Reference audio URL set:', reliableUrl);
+        // Use direct URL without Firebase SDK to avoid CORS issues
+        const directUrl = phrase!.audioUrl.replace('?alt=media&token=', '?alt=media&cors=true&token=');
+        setReferenceAudioUrl(directUrl);
+        console.log('✅ Reference audio URL set:', directUrl);
         
       } catch (error) {
         console.error('Failed to load reference audio:', error);
@@ -498,7 +498,6 @@ const PhraseDetailPage: React.FC = () => {
                     setReferenceAudioFailed(true);
                   }
                 }}
-                crossOrigin="anonymous"
                 preload="metadata"
                 style={{ display: 'none' }}
               />
